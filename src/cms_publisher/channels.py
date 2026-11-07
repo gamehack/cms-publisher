@@ -9,7 +9,6 @@ import httpx
 from .errors import PublisherError, UnknownDelivery
 from .models import Article
 from .profiles import Profile
-from .state import StateStore
 
 
 CMS_INGEST_URL = "https://cms.qjai.org/api/ingest"
@@ -87,25 +86,26 @@ def lookup_cms_delivery(source_key: str, *, token: str, url: str = CMS_INGEST_UR
             session.close()
 
 
-def create_cms_draft(article: Article, profile: Profile, store: StateStore, *,
-                     token: str, url: str = CMS_INGEST_URL,
+def create_cms_draft(article: Article, profile: Profile, *, token: str,
+                     url: str = CMS_INGEST_URL,
                      client: httpx.Client | None = None) -> str:
-    """Make at most one POST attempt; ambiguous outcomes require reconciliation."""
+    """Stateless CMS draft delivery; the CMS unique sourceKey is authoritative.
+
+    A fresh GitHub-hosted runner starts each invocation. We check the CMS by
+    sourceKey before a POST, and the CMS DB unique constraint prevents a second
+    row even after a timeout or a concurrent invocation.
+    """
     if len(token) < 32:
         raise PublisherError("CMS ingest token is missing or invalid")
     validate_cms_url(url)
     payload = cms_payload(article, profile)
     session = client or httpx.Client(timeout=25, follow_redirects=False)
     try:
-        # Fail closed if lookup errors. Importing history plus this lookup
-        # prevents replay when migrating from qjai-text-publisher.
+        # Fail closed if lookup errors. The CMS database is the durable
+        # source of truth, including drafts created by qjai-text-publisher.
         found = lookup_cms_delivery(article.source_key, token=token, url=url, client=session)
         if found is not None:
-            store.mark(article.source_key, "SUCCESS", receipt=found["receipt"],
-                       detail="already present in CMS: " + found["status"])
             return "already_exists"
-
-        store.reserve(article.source_key)
         try:
             response = session.post(
                 url,
@@ -120,12 +120,19 @@ def create_cms_draft(article: Article, profile: Profile, store: StateStore, *,
             if not (created or duplicate):
                 raise RuntimeError("Unconfirmed CMS acknowledgement")
         except Exception:
-            store.mark(article.source_key, "UNKNOWN",
-                       detail="ingest outcome requires read-only reconciliation")
-            raise UnknownDelivery("CMS ingest is UNKNOWN; reconcile by sourceKey before retry") from None
-        receipt = str(data.get("id") or data.get("sourceKey") or article.source_key)
-        store.mark(article.source_key, "SUCCESS", receipt=receipt,
-                   detail="duplicate" if duplicate else "created draft")
+            # The POST may already have committed. Check once by sourceKey,
+            # but never send a second POST in the same invocation.
+            try:
+                confirmed = lookup_cms_delivery(article.source_key, token=token,
+                                                url=url, client=session)
+            except PublisherError:
+                confirmed = None
+            if confirmed is not None:
+                return "confirmed_after_error"
+            raise UnknownDelivery(
+                "CMS POST outcome unknown; no immediate retry. Inspect CMS by sourceKey. "
+                "Future scheduled runs rely on CMS database uniqueness."
+            ) from None
         return "duplicate" if duplicate else "created"
     finally:
         if client is None:

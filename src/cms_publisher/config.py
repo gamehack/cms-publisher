@@ -36,9 +36,5 @@ def required(name: str, *, minimum: int = 1) -> str:
     return value
 
 
-def state_path() -> Path:
-    return Path(os.getenv("CMS_PUBLISHER_STATE", "/var/lib/cms-publisher/state.sqlite"))
-
-
 def publishing_enabled(profile: str) -> bool:
     return enabled("CMS_ENABLE_DRAFTS") and enabled("CMS_" + profile.upper() + "_ENABLED")

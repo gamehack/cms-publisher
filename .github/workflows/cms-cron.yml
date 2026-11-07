@@ -1,8 +1,8 @@
-name: CMS draft cron (Silicon Valley CVM)
+name: CMS draft cron (GitHub-hosted)
 
 on:
   schedule:
-    # Deliberately after each upstream Notion producer and WeChat slot.
+    # After Notion producers and the existing WeChat delivery windows.
     - cron: '15 8 * * *'
       timezone: Asia/Shanghai
     - cron: '15 19 * * *'
@@ -17,7 +17,7 @@ on:
         required: true
         options: [x, producthunt, trustmrr]
       mode:
-        description: Remote read-only check or CMS draft write
+        description: Read-only check or write an unpublished CMS draft
         type: choice
         required: true
         default: dry-run
@@ -31,23 +31,33 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  dispatch:
-    # New repository is safe to merge before server setup; schedule is OFF
-    # unless the repository variable CMS_PUBLISHER_ENABLED is exactly true.
+  publish:
+    # Fail closed until the owner enables this repository variable. The
+    # dry-run dispatch remains available before production activation.
     if: ${{ vars.CMS_PUBLISHER_ENABLED == 'true' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'dry-run') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 15
     env:
-      SV_HOST: ${{ secrets.SV_HOST }}
-      SV_USER: ${{ secrets.SV_USER }}
-      SV_SSH_PRIVATE_KEY: ${{ secrets.SV_SSH_PRIVATE_KEY }}
-      SV_SSH_KNOWN_HOSTS: ${{ secrets.SV_SSH_KNOWN_HOSTS }}
+      NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+      CMS_INGEST_TOKEN: ${{ secrets.CMS_INGEST_TOKEN }}
+      CMS_INGEST_URL: https://cms.qjai.org/api/ingest
+      CMS_ENABLE_DRAFTS: 'true'
+      CMS_X_ENABLED: 'true'
+      CMS_PRODUCTHUNT_ENABLED: 'true'
+      CMS_TRUSTMRR_ENABLED: 'true'
       SCHEDULE: ${{ github.event.schedule }}
       EVENT: ${{ github.event_name }}
       MANUAL_PROFILE: ${{ inputs.profile }}
       MANUAL_MODE: ${{ inputs.mode }}
     steps:
-      - name: Resolve a fixed profile and operation
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Resolve fixed profile and operation
         id: choose
         shell: bash
         run: |
@@ -59,39 +69,37 @@ jobs:
               '15 4 * * 1') profile=trustmrr ;;
               *) echo 'Unknown cron expression' >&2; exit 2 ;;
             esac
-            mode=publish
+            mode=run
           else
             case "$MANUAL_PROFILE" in
               x|producthunt|trustmrr) profile="$MANUAL_PROFILE" ;;
               *) echo 'Invalid manual profile' >&2; exit 2 ;;
             esac
             case "$MANUAL_MODE" in
-              dry-run|publish) mode="$MANUAL_MODE" ;;
+              dry-run) mode=dry-run ;;
+              publish) mode=run ;;
               *) echo 'Invalid manual mode' >&2; exit 2 ;;
             esac
           fi
           printf 'profile=%s\nmode=%s\n' "$profile" "$mode" >> "$GITHUB_OUTPUT"
 
-      - name: Prepare pinned SSH identity and host key
+      - name: Check required secrets without printing values
         shell: bash
         run: |
           set -euo pipefail
-          [[ -n "$SV_HOST" && -n "$SV_USER" && -n "$SV_SSH_PRIVATE_KEY" && -n "$SV_SSH_KNOWN_HOSTS" ]] || {
-            echo 'Silicon Valley server SSH secrets are missing' >&2; exit 2;
+          [[ -n "$NOTION_API_KEY" && ${#CMS_INGEST_TOKEN} -ge 32 ]] || {
+            echo 'NOTION_API_KEY or CMS_INGEST_TOKEN is missing' >&2
+            exit 2
           }
-          install -m 700 -d "$HOME/.ssh"
-          printf '%s\n' "$SV_SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
-          chmod 600 "$HOME/.ssh/id_ed25519"
-          printf '%s\n' "$SV_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
-          chmod 600 "$HOME/.ssh/known_hosts"
 
-      - name: Run installed publisher on Silicon Valley CVM
-        shell: bash
+      - name: Install publisher
+        run: python -m pip install -e .
+
+      - name: Create or confirm CMS draft
         env:
           PROFILE: ${{ steps.choose.outputs.profile }}
           MODE: ${{ steps.choose.outputs.mode }}
+        shell: bash
         run: |
           set -euo pipefail
-          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 \
-            -i "$HOME/.ssh/id_ed25519" "$SV_USER@$SV_HOST" \
-            "/opt/cms-publisher/scripts/run-on-server.sh $PROFILE $MODE"
+          python -m cms_publisher "$MODE" --profile "$PROFILE"

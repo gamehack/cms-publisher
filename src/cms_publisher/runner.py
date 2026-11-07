@@ -11,7 +11,6 @@ from .errors import PublisherError
 from .models import Article
 from .notion import NotionReader, load_article
 from .profiles import Profile
-from .state import StateStore
 
 
 @dataclass(frozen=True)
@@ -28,18 +27,12 @@ def read_article(profile: Profile, period: str, *, transport: httpx.BaseTranspor
         reader.close()
 
 
-def run(profile: Profile, period: str, store: StateStore, *, article: Article | None = None) -> RunResult:
+def run(profile: Profile, period: str, *, article: Article | None = None) -> RunResult:
     if not config.publishing_enabled(profile.name):
         raise PublisherError(f"CMS profile {profile.name} is disabled")
     article = article or read_article(profile, period)
-    store.save_snapshot(article)
-    previous = store.delivery_state(article.source_key)
-    if previous == "SUCCESS":
-        return RunResult(article, "ALREADY_DONE")
-    if previous != "PENDING":
-        raise PublisherError(f"CMS state {previous} requires manual reconciliation")
     outcome = create_cms_draft(
-        article, profile, store,
+        article, profile,
         token=config.required("CMS_INGEST_TOKEN", minimum=32),
         url=os.getenv("CMS_INGEST_URL", CMS_INGEST_URL).strip(),
     )
