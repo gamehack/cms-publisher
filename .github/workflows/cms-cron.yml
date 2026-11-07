@@ -1,0 +1,97 @@
+name: CMS draft cron (Silicon Valley CVM)
+
+on:
+  schedule:
+    # Deliberately after each upstream Notion producer and WeChat slot.
+    - cron: '15 8 * * *'
+      timezone: Asia/Shanghai
+    - cron: '15 19 * * *'
+      timezone: Asia/Shanghai
+    - cron: '15 4 * * 1'
+      timezone: Asia/Shanghai
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: CMS column
+        type: choice
+        required: true
+        options: [x, producthunt, trustmrr]
+      mode:
+        description: Remote read-only check or CMS draft write
+        type: choice
+        required: true
+        default: dry-run
+        options: [dry-run, publish]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cms-publisher-dispatch
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    # New repository is safe to merge before server setup; schedule is OFF
+    # unless the repository variable CMS_PUBLISHER_ENABLED is exactly true.
+    if: ${{ vars.CMS_PUBLISHER_ENABLED == 'true' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'dry-run') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      SV_HOST: ${{ secrets.SV_HOST }}
+      SV_USER: ${{ secrets.SV_USER }}
+      SV_SSH_PRIVATE_KEY: ${{ secrets.SV_SSH_PRIVATE_KEY }}
+      SV_SSH_KNOWN_HOSTS: ${{ secrets.SV_SSH_KNOWN_HOSTS }}
+      SCHEDULE: ${{ github.event.schedule }}
+      EVENT: ${{ github.event_name }}
+      MANUAL_PROFILE: ${{ inputs.profile }}
+      MANUAL_MODE: ${{ inputs.mode }}
+    steps:
+      - name: Resolve a fixed profile and operation
+        id: choose
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT" == "schedule" ]]; then
+            case "$SCHEDULE" in
+              '15 8 * * *') profile=x ;;
+              '15 19 * * *') profile=producthunt ;;
+              '15 4 * * 1') profile=trustmrr ;;
+              *) echo 'Unknown cron expression' >&2; exit 2 ;;
+            esac
+            mode=publish
+          else
+            case "$MANUAL_PROFILE" in
+              x|producthunt|trustmrr) profile="$MANUAL_PROFILE" ;;
+              *) echo 'Invalid manual profile' >&2; exit 2 ;;
+            esac
+            case "$MANUAL_MODE" in
+              dry-run|publish) mode="$MANUAL_MODE" ;;
+              *) echo 'Invalid manual mode' >&2; exit 2 ;;
+            esac
+          fi
+          printf 'profile=%s\nmode=%s\n' "$profile" "$mode" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare pinned SSH identity and host key
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$SV_HOST" && -n "$SV_USER" && -n "$SV_SSH_PRIVATE_KEY" && -n "$SV_SSH_KNOWN_HOSTS" ]] || {
+            echo 'Silicon Valley server SSH secrets are missing' >&2; exit 2;
+          }
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$SV_SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$SV_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Run installed publisher on Silicon Valley CVM
+        shell: bash
+        env:
+          PROFILE: ${{ steps.choose.outputs.profile }}
+          MODE: ${{ steps.choose.outputs.mode }}
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 \
+            -i "$HOME/.ssh/id_ed25519" "$SV_USER@$SV_HOST" \
+            "/opt/cms-publisher/scripts/run-on-server.sh $PROFILE $MODE"
