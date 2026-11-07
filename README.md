@@ -72,10 +72,10 @@ cms-publisher --env-file .env backfill --profile trustmrr --period weekly:2026-1
 # 在硅谷 CVM 上执行，先部署但不要开启写入开关
 sudo install -d -m 700 -o ubuntu -g ubuntu /var/lib/cms-publisher
 sudo install -d -m 755 -o ubuntu -g ubuntu /opt/cms-publisher
-git -C /opt/cms-publisher init
+git -C /opt/cms-publisher init -b cms-bootstrap
 git -C /opt/cms-publisher remote add origin https://github.com/gamehack/cms-publisher.git
 git -C /opt/cms-publisher fetch --depth=1 origin main
-git -C /opt/cms-publisher checkout -b main FETCH_HEAD
+git -C /opt/cms-publisher switch -c main FETCH_HEAD
 cd /opt/cms-publisher
 python3 -m venv .venv
 .venv/bin/python -m pip install -e .
