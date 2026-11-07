@@ -2,7 +2,7 @@
 
 潜界 AI 的独立、**无服务器** CMS 草稿投递器。三个内容生产项目将正式文章写入 Notion；本项目在 **GitHub-hosted Actions runner** 上读取已 READY 的文章，直接投递到 `cms.qjai.org` 草稿箱。
 
-从 [`qjai-text-publisher`](https://github.com/gamehack/qjai-text-publisher) 中提取 CMS 通道。旧项目继续负责微信公众号草稿，不再承担 CMS 投递。本项目没有云服务器部署、SSH、systemd、Docker、SQLite、Supabase 写入或持久化存储，也没有公开发布文章的功能。
+本项目从旧统一发布器拆出 CMS 通道；微信公众号草稿现由独立的 [mp-publisher](https://github.com/gamehack/mp-publisher) 在硅谷 Docker 容器中负责，二者互不调用。旧服务器代码及定时任务已于 2026-11-08 清除。本项目不需要云服务器部署、SSH、systemd、Docker、SQLite、Supabase 写入或持久化存储，也不会公开发布文章。
 
 ## 业务流程
 
@@ -47,7 +47,7 @@ GitHub-hosted runner 每次启动都是独立环境，本项目**刻意不使用
 6. **双开关默认关闭**：仓库 Actions Variable `CMS_PUBLISHER_ENABLED` 必须为 `true` 才允许计划任务和手动 `publish`；命令行自身还要求 `CMS_ENABLE_DRAFTS=true` 与对应 `CMS_<PROFILE>_ENABLED=true`。
 7. 私密的 Notion 和 CMS token 只存 GitHub Actions Secrets；工作流不输出凭据，不生成含正文的 artifact。PR CI 不能使用这两个生产凭据。
 
-> 迁移无需导入旧 SQLite：CMS 数据库才是持续有效的去重账本。旧 `qjai-text-publisher` 的 SQLite **不能删除**，其中仍有微信投递状态。
+> CMS 数据库自身的 `sourceKey` 唯一约束是长期去重依据，迁移无需旧 SQLite。旧服务器代码和定时器已清理；暂保留 `/var/lib/qjai-text-publisher/state.sqlite` 仅用于核对旧 CMS 的 12 条 SUCCESS 与 1 条 PENDING，确认后可按授权删除。新微信投递状态已迁移到 `/var/lib/mp-publisher/state.sqlite`。
 
 ## GitHub Actions 配置（新仓库）
 
@@ -57,21 +57,16 @@ GitHub-hosted runner 每次启动都是独立环境，本项目**刻意不使用
 |---|---|---|
 | **Secret** | `NOTION_API_KEY` | 已可读取三个正式 Notion 专栏的集成凭据 |
 | **Secret** | `CMS_INGEST_TOKEN` | 与 `qjai-cms` 后端 `CONTENT_INGEST_TOKEN` 匹配的现有令牌 |
-| **Variable** | `CMS_PUBLISHER_ENABLED` | **先保持 `false` 或不设置**；联调完成后改为字符串 `true` |
+| **Variable** | `CMS_PUBLISHER_ENABLED` | 生产计划任务必须为字符串 `true`；停用时设为 `false` |
 
 无需配置 `SV_HOST`、`SV_USER`、SSH 私钥或服务器 host key；这些都是上一版远程执行方案遗留配置，不再使用。
 
-**上线顺序：**
+**现行生产与下一次验收（截至 2026-11-08）：**
 
-1. 新仓库 `main` 的 CI 通过，GitHub Actions workflow 已就绪。
-2. 配置上述两个 Secrets，保持 `CMS_PUBLISHER_ENABLED` 未设置或 `false`。
-3. 手动运行 `CMS draft cron (GitHub-hosted)`，选择 `x`、`producthunt`、`trustmrr` 的 `dry-run` 逐项验证 Notion 读取与日期选择。`dry-run` 不会调用 CMS POST。
-4. 在旧项目硅谷服务器配置中关闭 `CMS_ENABLE_DRAFTS=false`，**只关闭 CMS 通道，不停止微信 systemd 任务，不删除旧数据库**；检查无旧 CMS 投递仍在执行。
-5. 设置 GitHub Actions Variable `CMS_PUBLISHER_ENABLED=true`。先用 `workflow_dispatch` 选择 `publish` 做一个已存在 `sourceKey` 的安全重复验证：预期 `already_exists`、CMS 文章数量不增加。
-6. 用一个正式 READY、CMS 尚未存在的期间进行首次新建草稿验收；确认 CMS 分类、标题和正文正确。
-7. 观察一轮自然 cron；再从旧 `qjai-text-publisher` 代码中去除 CMS 通道。保留微信链路正常运行。
-
-不要在旧 CMS 仍可能运行时启动新 CMS cron，以免造成不必要的并发请求。CMS 唯一约束是最后一道防线，不替代切换检查。
+1. `.github/workflows/cms-cron.yml` 已配置 `Asia/Shanghai` 定时：X 每日 08:15、Product Hunt 每日 19:15、TrustMRR 周一 04:15；三个 Profile 使用同一 GitHub-hosted 工作流。
+2. 2026-11-07 的手动 `workflow_dispatch` 已验证真实 CMS `draft` 创建及重复 `sourceKey` 防重（[执行记录](https://github.com/gamehack/cms-publisher/actions/runs/42388517140)）。这不能替代首次自然 `schedule` 验收。
+3. 等待首次自然运行，核对 Actions 结论、READY 选择、CMS 草稿状态与文章分类。发生跳过或失败时先查日志和 CMS `sourceKey`，不要盲目重投。
+4. 旧统一发布器 systemd 与代码已清理，不得重新启用旧 CMS 通道。微信公众号投递归 `mp-publisher`，无需等待微信成功才能写 CMS 草稿。
 
 ## 本地运行
 
@@ -103,6 +98,6 @@ chmod 600 .env
 ## 回滚和长期维护
 
 - 紧急停止：将仓库变量 `CMS_PUBLISHER_ENABLED=false`；计划和手动发布随即被阻止，`dry-run` 仍可使用。
-- CMS 已存在的文章不会被新旧发布器修改或删除。恢复旧 CMS 投递前，先确认新任务已经关闭。
+- CMS 已存在的文章不会被本发布器修改或删除。旧统一发布器已下线，回滚只暂停本仓库生产开关并排查，不应恢复旧 CMS 投递链路。
 - 定期查看 Actions 状态、成功率、`SKIPPED` 记录与 CMS 草稿结果。GitHub Actions cron 可能延迟或因公开仓库长期无活动而被停用。
 - 当前是轻量 MVP：Actions 运行时间、Notion/CMS API 调用是实际成本；没有额外常驻服务器费用和 GitHub artifact 存储需求。
