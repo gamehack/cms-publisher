@@ -15,13 +15,17 @@ on:
         description: CMS column
         type: choice
         required: true
-        options: [x, producthunt, trustmrr]
+        options: [x, producthunt, trustmrr, overseas]
       mode:
         description: Read-only check or write an unpublished CMS draft
         type: choice
         required: true
         default: dry-run
         options: [dry-run, publish]
+      period:
+        description: Overseas story release date (YYYY-MM-DD); required for overseas
+        type: string
+        required: false
 
 permissions:
   contents: read
@@ -45,10 +49,12 @@ jobs:
       CMS_X_ENABLED: 'true'
       CMS_PRODUCTHUNT_ENABLED: 'true'
       CMS_TRUSTMRR_ENABLED: 'true'
+      CMS_OVERSEAS_ENABLED: ${{ vars.CMS_OVERSEAS_ENABLED == 'true' }}
       SCHEDULE: ${{ github.event.schedule }}
       EVENT: ${{ github.event_name }}
       MANUAL_PROFILE: ${{ inputs.profile }}
       MANUAL_MODE: ${{ inputs.mode }}
+      MANUAL_PERIOD: ${{ inputs.period }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -72,7 +78,7 @@ jobs:
             mode=run
           else
             case "$MANUAL_PROFILE" in
-              x|producthunt|trustmrr) profile="$MANUAL_PROFILE" ;;
+              x|producthunt|trustmrr|overseas) profile="$MANUAL_PROFILE" ;;
               *) echo 'Invalid manual profile' >&2; exit 2 ;;
             esac
             case "$MANUAL_MODE" in
@@ -102,4 +108,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python -m cms_publisher "$MODE" --profile "$PROFILE"
+          if [[ "$PROFILE" == "overseas" ]]; then
+            [[ "$EVENT" == "workflow_dispatch" && "$MANUAL_PERIOD" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || {
+              echo 'Overseas manual dispatch requires YYYY-MM-DD period' >&2
+              exit 2
+            }
+            python -m cms_publisher "$MODE" --profile "$PROFILE" --period "$MANUAL_PERIOD"
+          else
+            python -m cms_publisher "$MODE" --profile "$PROFILE"
+          fi
