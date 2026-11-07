@@ -45,6 +45,13 @@ PROFILES = {
         source="trustmrr-weekly",
         schedule="Monday 04:15 Asia/Shanghai via GitHub Actions",
     ),
+    "overseas": Profile(
+        name="overseas",
+        parent_id="4109e605-ccf8-81f8-9094-c5a0023b36b6",
+        category_slug="overseas-stories",
+        source="overseas-stories",
+        schedule="manual only; no scheduled delivery until editorial acceptance",
+    ),
 }
 
 
@@ -57,7 +64,7 @@ def get_profile(name: str) -> Profile:
 
 def default_period(profile: Profile, now: datetime | None = None) -> str:
     now = now or datetime.now(BEIJING)
-    if profile.name == "x":
+    if profile.name in {"x", "overseas"}:
         return now.astimezone(BEIJING).date().isoformat()
     if profile.name == "producthunt":
         return (now.astimezone(PACIFIC).date() - timedelta(days=1)).isoformat()
@@ -83,7 +90,7 @@ def scheduled_periods(profile: Profile, now: datetime | None = None) -> tuple[st
 
 
 def validate_period(profile: Profile, period: str) -> str:
-    if profile.name in {"x", "producthunt"}:
+    if profile.name in {"x", "producthunt", "overseas"}:
         try:
             parsed = date.fromisoformat(period)
         except ValueError:
@@ -129,6 +136,8 @@ def expected_title(profile: Profile, period: str) -> tuple[str, bool]:
         return f"{period}｜X 每日商业情报", True
     if profile.name == "producthunt":
         return f"{period}｜", False
+    if profile.name == "overseas":
+        return f"{period}｜海外创业志｜", False
     kind, external = period.split(":", 1)
     label = "周报" if kind == "weekly" else "月报"
     return f"{external}｜TrustMRR {label}｜", False

@@ -101,3 +101,10 @@ chmod 600 .env
 - CMS 已存在的文章不会被本发布器修改或删除。旧统一发布器已下线，回滚只暂停本仓库生产开关并排查，不应恢复旧 CMS 投递链路。
 - 定期查看 Actions 状态、成功率、`SKIPPED` 记录与 CMS 草稿结果。GitHub Actions cron 可能延迟或因公开仓库长期无活动而被停用。
 - 当前是轻量 MVP：Actions 运行时间、Notion/CMS API 调用是实际成本；没有额外常驻服务器费用和 GitHub artifact 存储需求。
+
+## 海外创业志（M7 预接入，默认关闭）
+
+- 新增 `overseas` Profile，固定读取 Notion「07 · 海外创业志」的直接子页面，标题格式 `YYYY-MM-DD｜海外创业志｜<人物故事标题>`，来源键 `overseas-stories:YYYY-MM-DD`，CMS 分类 `overseas-stories`。
+- **仅支持显式 `--period YYYY-MM-DD`**；没有海外创业志的 cron。GitHub Actions `workflow_dispatch` 已提供 `overseas` 和 `period` 输入，仅作人工 dry-run / 经批准的草稿投递。
+- `CMS_OVERSEAS_ENABLED` Action Variable 缺省为 false；即使全局 `CMS_PUBLISHER_ENABLED=true`，新专栏仍不能写草稿。启用前必须通过 M7 人工成稿验收，并核对 CMS 后台已存在该分类。
+- 不能直接把 M6 样稿改成 READY；必须先根据 [M7 编辑规范](https://app.notion.com/p/4119e605ccf881f0ae22dcad97535908) 确认正文与源键 SHA-256。
