@@ -9,6 +9,7 @@ from . import config
 from .channels import CMS_INGEST_URL, lookup_cms_delivery
 from .errors import PublisherError, SkipArticle
 from .profiles import PROFILES, default_period, get_profile, scheduled_periods, validate_period
+from .notion import NotionReader
 from .runner import read_article, run
 
 
@@ -20,6 +21,7 @@ def parser() -> argparse.ArgumentParser:
         cmd = commands.add_parser(name)
         cmd.add_argument("--profile", required=True, choices=sorted(PROFILES))
         cmd.add_argument("--period", "--issue", dest="period", help="Overseas: serial issue (01); other profiles: period")
+        cmd.add_argument("--auto", action="store_true", help="For overseas scheduled runs: select first undelivered serial")
         if name == "backfill":
             cmd.add_argument("--authorize", action="store_true")
     lookup = commands.add_parser("lookup")
@@ -39,8 +41,31 @@ def execute(args: argparse.Namespace) -> dict[str, object]:
                 "cms": found, "external_write": False}
 
     profile = get_profile(args.profile)
-    if profile.name == "overseas" and not args.period:
+    auto = getattr(args, "auto", False)
+    if auto and (profile.name != "overseas" or args.command != "run" or args.period):
+        raise PublisherError("--auto requires overseas run without --period")
+    if profile.name == "overseas" and not args.period and not auto:
         raise PublisherError("Overseas stories require explicit --issue (or --period 01); never select by date")
+    if auto:
+        reader = NotionReader(config.required("NOTION_API_KEY"))
+        try:
+            issues = reader.overseas_issues(profile.parent_id)
+        finally:
+            reader.close()
+        for issue in issues:
+            key = f"overseas-stories:{issue}"
+            if lookup_cms_delivery(key, token=config.required("CMS_INGEST_TOKEN", minimum=32),
+                                   url=os.getenv("CMS_INGEST_URL", CMS_INGEST_URL).strip()):
+                continue
+            try:
+                result = run(profile, issue)
+                return {"profile": profile.name, "status": "COMPLETED", "reports": [
+                    {"period": issue, "source_key": key, "status": "COMPLETED", "cms": result.outcome}]}
+            except SkipArticle as exc:
+                return {"profile": profile.name, "status": "SKIPPED", "reports": [
+                    {"period": issue, "status": "SKIPPED", "reason": str(exc)}]}
+        return {"profile": profile.name, "status": "SKIPPED", "reports": [],
+                "reason": "No new overseas issue pending CMS delivery"}
     period = validate_period(profile, args.period or default_period(profile))
     if args.command in {"preview", "dry-run"}:
         article = read_article(profile, period)

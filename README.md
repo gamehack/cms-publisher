@@ -1,6 +1,6 @@
 # cms-publisher
 
-潜界 AI 的独立、**无服务器** CMS 草稿投递器。三个内容生产项目将正式文章写入 Notion；本项目在 **GitHub-hosted Actions runner** 上读取已 READY 的文章，直接投递到 `cms.qjai.org` 草稿箱。
+潜界 AI 的独立、**无服务器** CMS 草稿投递器。各内容生产项目将正式文章写入 Notion；本项目在 **GitHub-hosted Actions runner** 上读取已 READY 的文章，直接投递到 `cms.qjai.org` 草稿箱。
 
 本项目从旧统一发布器拆出 CMS 通道；微信公众号草稿现由独立的 [mp-publisher](https://github.com/gamehack/mp-publisher) 在硅谷 Docker 容器中负责，二者互不调用。旧服务器代码及定时任务已于 2026-11-08 清除。本项目不需要云服务器部署、SSH、systemd、Docker、SQLite、Supabase 写入或持久化存储，也不会公开发布文章。
 
@@ -28,6 +28,7 @@ Grok / Product Hunt / TrustMRR
 | `x` | `4019e605-ccf8-8193-9c2d-dbe20e3112fa` | `x-daily:YYYY-MM-DD` | `x` | 每天 08:15 |
 | `producthunt` | `4109e605-ccf8-81c4-accd-c19386b4a38d` | `producthunt:YYYY-MM-DD` | `producthunt` | 每天 19:15 |
 | `trustmrr` | `4109e605-ccf8-81ed-a46c-f9ab95538f5b` | `trustmrr-weekly:YYYY-MM-DD` / `trustmrr-monthly:YYYY-MM` | `TrustMRR` | 每周一 04:15 |
+| `overseas` | `4109e605-ccf8-81f8-9094-c5a0023b36b6` | `overseas-stories:NN` | `overseas-stories` | 每天 09:05（仅 READY） |
 
 - CMS 时刻晚于现有微信草稿任务：X 07:30；Product Hunt 17:30/18:30；TrustMRR 周一 03:00。
 - Product Hunt 日期继续采用 America/Los_Angeles 上一个完整日期。
@@ -102,10 +103,15 @@ chmod 600 .env
 - 定期查看 Actions 状态、成功率、`SKIPPED` 记录与 CMS 草稿结果。GitHub Actions cron 可能延迟或因公开仓库长期无活动而被停用。
 - 当前是轻量 MVP：Actions 运行时间、Notion/CMS API 调用是实际成本；没有额外常驻服务器费用和 GitHub artifact 存储需求。
 
-## 海外创业志（M7 预接入，默认关闭）
+## 海外创业志（M7 首期手动接入的历史说明）
 
 - 新增 `overseas` Profile，固定读取 Notion「07 · 海外创业志」的直接子页面，标题格式 `海外创业志 01|<人物故事标题>`，来源键 `overseas-stories:01`，CMS 分类 `overseas-stories`。序号为独立的发表期次，不是日期。
 - CMS 草稿保留完整栏目名、期号和人物标题，与公众号草稿一致；按共享编辑规则限制为最多 64 UTF-8 字节，不静默剥离前缀或截断。
-- **仅支持显式 `--issue 01`（兼容 `--period 01`）**；没有海外创业志的 cron。GitHub Actions `workflow_dispatch` 已提供 `overseas` 和 `period` 输入，填写序号 `01`，仅作人工 dry-run / 经批准的草稿投递。
+- M7 首期要求显式 `--issue 01`（兼容 `--period 01`）；M8 才新增上述自动发现期号的 cron。GitHub Actions `workflow_dispatch` 的 `overseas` 和 `period` 输入保留作为手动验收入口。
 - `CMS_OVERSEAS_ENABLED` Action Variable 缺省为 false；即使全局 `CMS_PUBLISHER_ENABLED=true`，新专栏仍不能写草稿。启用前必须通过 M7 人工成稿验收，并核对 CMS 后台已存在该分类。
 - 不能直接把 M6 样稿改成 READY；必须先根据 [M7 编辑规范](https://app.notion.com/p/4119e605ccf881f0ae22dcad97535908) 确认正文与源键 SHA-256。
+# 海外创业志 M8 自动草稿投递
+
+`cms-cron.yml` 每天 **北京时间 09:05** 扫描 Notion「07 · 海外创业志」直属页面，按 `01`、`02`、`03` 连续期号排列。对 CMS 中已存在的 `overseas-stories:NN` 来源键只读跳过；最多对第一个未入库的期号调用一次现有 `run`。该文章若未签署有效 READY，正常 `SKIPPED`，不越过该期向后投递。重复期号或缺号则失败并等待人工修复。
+
+沿用 `CMS_PUBLISHER_ENABLED=true` 和 `CMS_OVERSEAS_ENABLED=true` 两个独立开关，以及已配置的 Notion / CMS ingest Secrets。只创建 `draft`，不公开发布。人工单期 `workflow_dispatch`（`profile=overseas`、`period=NN`）保持可用；自动模式为 `python -m cms_publisher run --profile overseas --auto`。
