@@ -50,7 +50,7 @@ PROFILES = {
         parent_id="4109e605-ccf8-81f8-9094-c5a0023b36b6",
         category_slug="overseas-stories",
         source="overseas-stories",
-        schedule="manual only; no scheduled delivery until editorial acceptance",
+        schedule="daily 09:05 Asia/Shanghai; only signed READY stories",
     ),
 }
 
