@@ -14,8 +14,8 @@ def test_overseas_is_explicit_manual_profile():
     assert profile.parent_id == "4109e605-ccf8-81f8-9094-c5a0023b36b6"
     assert profile.category_slug == "overseas-stories"
     assert source_key(profile, "01") == "overseas-stories:01"
-    assert expected_title(profile, "01") == ("01｜海外创业志｜", False)
-    assert display_title(profile, "01", "01｜海外创业志｜Mihai 的反差创业") == "Mihai 的反差创业"
+    assert expected_title(profile, "01") == ("海外创业志 01|", False)
+    assert display_title(profile, "01", "海外创业志 01|Mihai 的反差创业") == "Mihai 的反差创业"
     with pytest.raises(PublisherError):
         validate_period(profile, "01-extra")
     with pytest.raises(PublisherError, match="calendar date"):
