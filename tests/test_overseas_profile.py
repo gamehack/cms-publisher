@@ -15,11 +15,20 @@ def test_overseas_is_explicit_manual_profile():
     assert profile.category_slug == "overseas-stories"
     assert source_key(profile, "01") == "overseas-stories:01"
     assert expected_title(profile, "01") == ("海外创业志 01|", False)
-    assert display_title(profile, "01", "海外创业志 01|Mihai 的反差创业") == "Mihai 的反差创业"
+    assert display_title(profile, "01", "海外创业志 01|Mihai 的反差创业") == "海外创业志 01|Mihai 的反差创业"
     with pytest.raises(PublisherError):
         validate_period(profile, "01-extra")
     with pytest.raises(PublisherError, match="calendar date"):
         default_period(profile)
+
+
+def test_overseas_title_matches_wechat_length_policy():
+    profile = PROFILES["overseas"]
+    title = "海外创业志 01|不想开会的程序员，做起招标生意"
+    assert len(title.encode("utf-8")) == 64
+    assert display_title(profile, "01", title) == title
+    with pytest.raises(PublisherError, match="64 UTF-8 bytes"):
+        display_title(profile, "01", "海外创业志 01|不想再开会的程序员，一个人做起了招标生意")
 
 
 def test_overseas_requires_period_and_stays_disabled_without_explicit_flag(monkeypatch):

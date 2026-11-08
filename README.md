@@ -105,6 +105,7 @@ chmod 600 .env
 ## 海外创业志（M7 预接入，默认关闭）
 
 - 新增 `overseas` Profile，固定读取 Notion「07 · 海外创业志」的直接子页面，标题格式 `海外创业志 01|<人物故事标题>`，来源键 `overseas-stories:01`，CMS 分类 `overseas-stories`。序号为独立的发表期次，不是日期。
+- CMS 草稿保留完整栏目名、期号和人物标题，与公众号草稿一致；按共享编辑规则限制为最多 64 UTF-8 字节，不静默剥离前缀或截断。
 - **仅支持显式 `--issue 01`（兼容 `--period 01`）**；没有海外创业志的 cron。GitHub Actions `workflow_dispatch` 已提供 `overseas` 和 `period` 输入，填写序号 `01`，仅作人工 dry-run / 经批准的草稿投递。
 - `CMS_OVERSEAS_ENABLED` Action Variable 缺省为 false；即使全局 `CMS_PUBLISHER_ENABLED=true`，新专栏仍不能写草稿。启用前必须通过 M7 人工成稿验收，并核对 CMS 后台已存在该分类。
 - 不能直接把 M6 样稿改成 READY；必须先根据 [M7 编辑规范](https://app.notion.com/p/4119e605ccf881f0ae22dcad97535908) 确认正文与源键 SHA-256。
