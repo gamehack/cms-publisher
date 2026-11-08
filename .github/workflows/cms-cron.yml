@@ -10,7 +10,7 @@ on:
     - cron: '15 4 * * 1'
       timezone: Asia/Shanghai
     # Overseas: approved Notion serials only, at most one unpublished CMS draft per day.
-    - cron: '05 9 * * *'
+    - cron: '30 7 * * *'
       timezone: Asia/Shanghai
   workflow_dispatch:
     inputs:
@@ -76,7 +76,7 @@ jobs:
               '15 8 * * *') profile=x ;;
               '15 19 * * *') profile=producthunt ;;
               '15 4 * * 1') profile=trustmrr ;;
-              '05 9 * * *') profile=overseas ;;
+              '30 7 * * *') profile=overseas ;;
               *) echo 'Unknown cron expression' >&2; exit 2 ;;
             esac
             mode=run

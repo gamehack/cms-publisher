@@ -28,7 +28,7 @@ Grok / Product Hunt / TrustMRR
 | `x` | `4019e605-ccf8-8193-9c2d-dbe20e3112fa` | `x-daily:YYYY-MM-DD` | `x` | 每天 08:15 |
 | `producthunt` | `4109e605-ccf8-81c4-accd-c19386b4a38d` | `producthunt:YYYY-MM-DD` | `producthunt` | 每天 19:15 |
 | `trustmrr` | `4109e605-ccf8-81ed-a46c-f9ab95538f5b` | `trustmrr-weekly:YYYY-MM-DD` / `trustmrr-monthly:YYYY-MM` | `TrustMRR` | 每周一 04:15 |
-| `overseas` | `4109e605-ccf8-81f8-9094-c5a0023b36b6` | `overseas-stories:NN` | `overseas-stories` | 每天 09:05（仅 READY） |
+| `overseas` | `4109e605-ccf8-81f8-9094-c5a0023b36b6` | `overseas-stories:NN` | `overseas-stories` | 每天 07:30（仅 READY） |
 
 - CMS 时刻晚于现有微信草稿任务：X 07:30；Product Hunt 17:30/18:30；TrustMRR 周一 03:00。
 - Product Hunt 日期继续采用 America/Los_Angeles 上一个完整日期。
@@ -112,6 +112,6 @@ chmod 600 .env
 - 不能直接把 M6 样稿改成 READY；必须先根据 [M7 编辑规范](https://app.notion.com/p/4119e605ccf881f0ae22dcad97535908) 确认正文与源键 SHA-256。
 # 海外创业志 M8 自动草稿投递
 
-`cms-cron.yml` 每天 **北京时间 09:05** 扫描 Notion「07 · 海外创业志」直属页面，按 `01`、`02`、`03` 连续期号排列。对 CMS 中已存在的 `overseas-stories:NN` 来源键只读跳过；最多对第一个未入库的期号调用一次现有 `run`。该文章若未签署有效 READY，正常 `SKIPPED`，不越过该期向后投递。重复期号或缺号则失败并等待人工修复。
+`cms-cron.yml` 每天 **北京时间 07:30** 扫描 Notion「07 · 海外创业志」直属页面，按 `01`、`02`、`03` 连续期号排列。对 CMS 中已存在的 `overseas-stories:NN` 来源键只读跳过；最多对第一个未入库的期号调用一次现有 `run`。该文章若未签署有效 READY，正常 `SKIPPED`，不越过该期向后投递。重复期号或缺号则失败并等待人工修复。
 
 沿用 `CMS_PUBLISHER_ENABLED=true` 和 `CMS_OVERSEAS_ENABLED=true` 两个独立开关，以及已配置的 Notion / CMS ingest Secrets。只创建 `draft`，不公开发布。人工单期 `workflow_dispatch`（`profile=overseas`、`period=NN`）保持可用；自动模式为 `python -m cms_publisher run --profile overseas --auto`。
