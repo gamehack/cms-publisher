@@ -19,7 +19,7 @@ def parser() -> argparse.ArgumentParser:
     for name in ("preview", "dry-run", "run", "backfill"):
         cmd = commands.add_parser(name)
         cmd.add_argument("--profile", required=True, choices=sorted(PROFILES))
-        cmd.add_argument("--period")
+        cmd.add_argument("--period", "--issue", dest="period", help="Overseas: serial issue (01); other profiles: period")
         if name == "backfill":
             cmd.add_argument("--authorize", action="store_true")
     lookup = commands.add_parser("lookup")
@@ -40,7 +40,7 @@ def execute(args: argparse.Namespace) -> dict[str, object]:
 
     profile = get_profile(args.profile)
     if profile.name == "overseas" and not args.period:
-        raise PublisherError("Overseas stories require explicit --period; no automatic date selection")
+        raise PublisherError("Overseas stories require explicit --issue (or --period 01); never select by date")
     period = validate_period(profile, args.period or default_period(profile))
     if args.command in {"preview", "dry-run"}:
         article = read_article(profile, period)
