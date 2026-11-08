@@ -161,4 +161,9 @@ def display_title(profile: Profile, period: str, notion_title: str) -> str:
     title = notion_title[len(selector):].strip()
     if not title or len(title) > 200:
         raise PublisherError("Invalid article title")
+    if profile.name == "overseas":
+        # Use the same serial-prefixed editorial title as the WeChat draft.
+        if len(notion_title.encode("utf-8")) > 64:
+            raise PublisherError("Overseas draft title exceeds 64 UTF-8 bytes")
+        return notion_title
     return title
