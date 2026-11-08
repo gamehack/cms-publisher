@@ -23,7 +23,7 @@ on:
         default: dry-run
         options: [dry-run, publish]
       period:
-        description: Overseas story release date (YYYY-MM-DD); required for overseas
+        description: Overseas story issue number (e.g. 01); required for overseas
         type: string
         required: false
 
@@ -109,8 +109,8 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$PROFILE" == "overseas" ]]; then
-            [[ "$EVENT" == "workflow_dispatch" && "$MANUAL_PERIOD" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || {
-              echo 'Overseas manual dispatch requires YYYY-MM-DD period' >&2
+            [[ "$EVENT" == "workflow_dispatch" && "$MANUAL_PERIOD" =~ ^(0[1-9]|[1-9][0-9]{1,4})$ ]] || {
+              echo 'Overseas manual dispatch requires issue number 01..99999' >&2
               exit 2
             }
             python -m cms_publisher "$MODE" --profile "$PROFILE" --period "$MANUAL_PERIOD"
