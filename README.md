@@ -114,4 +114,6 @@ chmod 600 .env
 
 `cms-cron.yml` 每天 **北京时间 07:30** 扫描 Notion「07 · 海外创业志」直属页面，按 `01`、`02`、`03` 连续期号排列。对 CMS 中已存在的 `overseas-stories:NN` 来源键只读跳过；最多对第一个未入库的期号调用一次现有 `run`。该文章若未签署有效 READY，正常 `SKIPPED`，不越过该期向后投递。重复期号或缺号则失败并等待人工修复。
 
+CMS 对 `overseas` 专栏在构建 `bodyMarkdown` 投递负载时移除末尾「资料来源」章节及其来源 URL、档案编号；**Notion 正文、READY SHA-256、内部归档全部保留**，其他专栏不变。已经存在的历史 CMS 草稿不会自动覆盖或重投。
+
 沿用 `CMS_PUBLISHER_ENABLED=true` 和 `CMS_OVERSEAS_ENABLED=true` 两个独立开关，以及已配置的 Notion / CMS ingest Secrets。只创建 `draft`，不公开发布。人工单期 `workflow_dispatch`（`profile=overseas`、`period=NN`）保持可用；自动模式为 `python -m cms_publisher run --profile overseas --auto`。

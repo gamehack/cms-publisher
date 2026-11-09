@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import httpx
 import pytest
 
@@ -18,6 +20,44 @@ def item(profile="producthunt", period="2026-11-05"):
     return Article(profile, period, source_key(p, period), "11111111-1111-4111-8111-111111111111",
                    "notion title", "CMS article", "summary", "# CMS article\n\ntext\n", "a" * 64)
 
+
+
+
+def test_cms_overseas_source_section_is_internal_only():
+    original = (
+        "# 创业故事\n\n"
+        "正文里提到资料来源字段，但这些文字必须保留。\n\n"
+        "## 资料来源\n\n"
+        "- https://example.com/original-story\n\n"
+        "档案编号：INTERNAL-01\n"
+    )
+    article = replace(item("overseas", "01"), body_markdown=original)
+    payload = cms_payload(article, PROFILES["overseas"])
+    assert article.body_markdown == original
+    assert payload["categorySlug"] == "overseas-stories"
+    assert payload["source"] == "overseas-stories"
+    assert payload["externalId"] == "01"
+    assert payload["bodyMarkdown"] == (
+        "# 创业故事\n\n"
+        "正文里提到资料来源字段，但这些文字必须保留。\n"
+    )
+    assert "https://example.com/original-story" not in payload["bodyMarkdown"]
+    assert "档案编号" not in payload["bodyMarkdown"]
+
+
+def test_cms_other_profiles_do_not_remove_source_section():
+    original = "# 测试\n\n正文\n\n## 资料来源\n\n- https://example.com\n"
+    ph = replace(item(), body_markdown=original)
+    assert cms_payload(ph, PROFILES["producthunt"])["bodyMarkdown"] == original
+    # Unchanged when an overseas draft has no trailing source section.
+    overseas = replace(item("overseas", "01"), body_markdown="# 测试\n\n正文\n")
+    assert cms_payload(overseas, PROFILES["overseas"])["bodyMarkdown"] == overseas.body_markdown
+
+
+def test_cms_overseas_empty_body_after_source_removal_fails_closed():
+    article = replace(item("overseas", "01"), body_markdown="## 资料来源\n\n- https://example.com\n")
+    with pytest.raises(PublisherError, match="missing"):
+        cms_payload(article, PROFILES["overseas"])
 
 def test_cms_payload_preserves_source_key_mapping():
     ph = cms_payload(item(), PROFILES["producthunt"])

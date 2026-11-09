@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -14,6 +15,9 @@ from .profiles import Profile
 CMS_INGEST_URL = "https://cms.qjai.org/api/ingest"
 MAX_CMS_BODY = 220_000
 USER_AGENT = "QJAI-CMS-Publisher/1.0 (+https://cms.qjai.org/)"
+OVERSEAS_SOURCES_HEADING = re.compile(
+    r"^\s{0,3}(?:#{1,6}\s+)?(?:\*\*|__)?资料来源(?:\*\*|__)?(?:\s*[：:].*)?\s*$"
+)
 
 
 def safe_json(response: httpx.Response) -> dict[str, Any]:
@@ -28,9 +32,26 @@ def safe_json(response: httpx.Response) -> dict[str, Any]:
     return value
 
 
-def cms_payload(article: Article, profile: Profile) -> dict[str, str]:
-    if not article.body_markdown.strip() or len(article.body_markdown) > 180_000:
+def cms_draft_markdown(article: Article, profile: Profile) -> str:
+    """Only remove internal source references from overseas CMS drafts.
+
+    Notion's canonical Markdown and READY checksum remain unchanged. Other
+    profiles retain their previous rendering without any source filtering.
+    """
+    body = article.body_markdown
+    if profile.name == "overseas":
+        lines = body.splitlines()
+        for index, line in enumerate(lines):
+            if OVERSEAS_SOURCES_HEADING.fullmatch(line.strip()):
+                body = "\n".join(lines[:index]).rstrip() + "\n"
+                break
+    if not body.strip() or len(body) > 180_000:
         raise PublisherError("CMS Markdown body is missing or too large")
+    return body
+
+
+def cms_payload(article: Article, profile: Profile) -> dict[str, str]:
+    body = cms_draft_markdown(article, profile)
     source, external_id = article.source_key.split(":", 1)
     payload = {
         "source": source,
@@ -38,7 +59,7 @@ def cms_payload(article: Article, profile: Profile) -> dict[str, str]:
         "categorySlug": profile.category_slug,
         "title": article.title,
         "summary": article.summary,
-        "bodyMarkdown": article.body_markdown,
+        "bodyMarkdown": body,
     }
     if len(json.dumps(payload, ensure_ascii=False).encode("utf-8")) > MAX_CMS_BODY:
         raise PublisherError("CMS request body exceeds safety limit")
