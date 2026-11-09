@@ -4,6 +4,7 @@ import json
 import httpx
 import pytest
 
+from cms_publisher.channels import cms_payload
 from cms_publisher.errors import PublisherError, SkipArticle
 from cms_publisher.notion import NotionReader, load_article, split_ready
 from cms_publisher.profiles import PROFILES
@@ -101,3 +102,57 @@ def test_truncated_markdown_never_becomes_draft():
     with pytest.raises(PublisherError, match="truncated"):
         reader.markdown("11111111-1111-4111-8111-111111111111")
     reader.close()
+
+
+def test_overseas_verified_notion_source_is_preserved_but_cms_payload_is_filtered():
+    parent = PROFILES["overseas"].parent_id
+    child = "11111111-1111-4111-8111-111111111111"
+    title = "海外创业志 01|不想开会的程序员"
+    canonical = (
+        "# 不想开会的程序员\n\n"
+        "这是一篇有正文的人物故事。\n\n"
+        "## 资料来源\n\n"
+        "- https://example.com/founder\n\n"
+        "档案编号：internal-123\n"
+    )
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    marker = f"QJAI_PUBLISH_READY v=1 source_key=overseas-stories:01 content_sha256={digest}\n"
+
+    def handler(request: httpx.Request):
+        path = request.url.path
+        if path == f"/v1/blocks/{parent}/children":
+            return httpx.Response(200, json={
+                "results": [{"id": child, "type": "child_page", "child_page": {"title": title}}],
+                "has_more": False,
+            })
+        if path == f"/v1/pages/{child}":
+            return httpx.Response(200, json={
+                "parent": {"type": "page_id", "page_id": parent},
+                "properties": {"title": {"type": "title", "title": [{"plain_text": title}]}},
+            })
+        if path == f"/v1/pages/{child}/markdown":
+            return httpx.Response(200, json={
+                "object": "page_markdown",
+                "markdown": canonical + marker,
+                "truncated": False,
+                "unknown_block_ids": [],
+                "warnings": [],
+            })
+        raise AssertionError(path)
+
+    reader = NotionReader("mock-token", transport=httpx.MockTransport(handler))
+    try:
+        article = load_article(reader, PROFILES["overseas"], "01")
+    finally:
+        reader.close()
+
+    payload = cms_payload(article, PROFILES["overseas"])
+    assert article.body_markdown == canonical
+    assert article.content_sha256 == digest
+    assert "资料来源" in article.body_markdown
+    assert "https://example.com/founder" in article.body_markdown
+    assert "档案编号" in article.body_markdown
+    assert "这是一篇有正文的人物故事。" in payload["bodyMarkdown"]
+    assert "资料来源" not in payload["bodyMarkdown"]
+    assert "https://example.com/founder" not in payload["bodyMarkdown"]
+    assert "档案编号" not in payload["bodyMarkdown"]
