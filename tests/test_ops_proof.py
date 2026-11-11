@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 import json
+import os
 import tempfile
 import unittest
 
@@ -14,6 +15,10 @@ def row(source_key,cms="created",status="COMPLETED"):
     return {"source_key":source_key,"cms":cms,"status":status}
 
 class OpsProofTests(unittest.TestCase):
+    def setUp(self):
+        environment=patch.dict(os.environ,{"CMS_INGEST_TOKEN":"x"*40})
+        environment.start()
+        self.addCleanup(environment.stop)
     def test_complete_profiles_mapped_to_correct_periods(self):
         events=ops_proof.proof_items(reports(
             row("producthunt:2026-11-09"),
