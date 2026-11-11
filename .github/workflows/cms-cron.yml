@@ -32,6 +32,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: cms-publisher-dispatch
@@ -115,14 +116,25 @@ jobs:
           if [[ "$PROFILE" == "overseas" ]]; then
             if [[ "$EVENT" == "schedule" ]]; then
               [[ "$CMS_OVERSEAS_ENABLED" == "true" ]] || { echo 'Overseas profile not enabled; skip'; exit 0; }
-              python -m cms_publisher run --profile overseas --auto
+              python -m cms_publisher run --profile overseas --auto > "$RUNNER_TEMP/cms-result.json"
             else
               [[ "$MANUAL_PERIOD" =~ ^(0[1-9]|[1-9][0-9]{1,4})$ ]] || {
                 echo 'Overseas manual dispatch requires issue number 01..99999' >&2
                 exit 2
               }
-              python -m cms_publisher "$MODE" --profile "$PROFILE" --period "$MANUAL_PERIOD"
+              python -m cms_publisher "$MODE" --profile "$PROFILE" > "$RUNNER_TEMP/cms-result.json" --period "$MANUAL_PERIOD" > "$RUNNER_TEMP/cms-result.json"
             fi
           else
             python -m cms_publisher "$MODE" --profile "$PROFILE"
+          fi
+
+      - name: Verify CMS sourceKey and report delivery evidence to Ops
+        if: ${{ success() && steps.choose.outputs.mode == 'run' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f "$RUNNER_TEMP/cms-result.json" ]]; then
+            python -m cms_publisher.ops_proof --result-file "$RUNNER_TEMP/cms-result.json"
+          else
+            echo "OPS_CMS_NO_DRAFT_RESULT"
           fi
