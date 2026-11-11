@@ -77,8 +77,11 @@ def proof_items(result:dict,now:datetime)->list[dict]:
         else:
             if not re.fullmatch(r"\d{4}-\d\d-\d\d",period):
                 raise RuntimeError("Calendar period invalid")
-            if datetime.strptime(period,"%Y-%m-%d").strftime("%Y-%m-%d")!=period:
-                raise RuntimeError("Calendar period invalid")
+            try:
+                if datetime.strptime(period,"%Y-%m-%d").strftime("%Y-%m-%d")!=period:
+                    raise RuntimeError("Calendar period invalid")
+            except ValueError:
+                raise RuntimeError("Calendar period invalid") from None
             target=period
         items.append({"job_id":job,"period_key":target,
             "stage":"cms_draft_confirmed","status":"success",
