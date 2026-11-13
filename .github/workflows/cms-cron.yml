@@ -122,10 +122,10 @@ jobs:
                 echo 'Overseas manual dispatch requires issue number 01..99999' >&2
                 exit 2
               }
-              python -m cms_publisher "$MODE" --profile "$PROFILE" > "$RUNNER_TEMP/cms-result.json" --period "$MANUAL_PERIOD" > "$RUNNER_TEMP/cms-result.json"
+              python -m cms_publisher "$MODE" --profile "$PROFILE" --period "$MANUAL_PERIOD" > "$RUNNER_TEMP/cms-result.json"
             fi
           else
-            python -m cms_publisher "$MODE" --profile "$PROFILE"
+            python -m cms_publisher "$MODE" --profile "$PROFILE" > "$RUNNER_TEMP/cms-result.json"
           fi
 
       - name: Verify CMS sourceKey and report delivery evidence to Ops
